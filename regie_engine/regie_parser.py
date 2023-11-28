@@ -48,6 +48,7 @@ class Regie:
 
             except WebDriverException as WE:
                 logging.error(f"Something wrong with the website's server - {url}\n")
+                IOController.export_failed_result(url=url)
                 break
 
 

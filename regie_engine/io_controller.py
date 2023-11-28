@@ -2,29 +2,36 @@ import csv
 import io
 import os
 from typing import List
-from datetime import datetime
+from datetime import date, datetime
 from urllib.parse import urlparse
+
 
 class IOController:
 
     # static shared variables
     is_coulumn_inserted = False
     is_coulumn_inserted_in_stat = False
-    input_file_name = "input.txt"
-    output_file_name = "output.csv"
-    output_dir_name = "results_regie_run"
-    output_file_path = ""
-    failed_results_file_name = "regie_failed_results_run.csv"
-    failed_results_file_path = ""
-    stat_file_name = "email_collection_stats.csv"
-    stat_file_path = ""
+    is_coulumn_inserted_in_failed_results = False
+
+    input_file_name: str = "input.txt"
+    output_file_name: str = "output"
+    output_dir_name: str = "results_regie_run"
+    output_file_path: str = ""
+    failed_results_file_name: str = "regie_failed_results_run"
+    failed_results_file_path: str = ""
+    stat_file_name: str = "email_collection_stats.csv"
+    stat_file_path: str = ""
 
 
     def __init__(self) -> None:
+
         try:
             os.makedirs(IOController.output_dir_name)
         except FileExistsError:
             pass
+        
+        IOController.output_file_name += f"_{date.isoformat(datetime.now())}.csv"
+        IOController.failed_results_file_name += f"_{date.isoformat(datetime.now())}.csv"
 
         IOController.output_file_path = os.path.join(
             IOController.output_dir_name,
@@ -41,7 +48,20 @@ class IOController:
 
 
     @staticmethod
+    def __file_already_exist(file_path: str)-> bool:
+        try:
+            with open(file_path, "r") as f_handle:
+                reader = csv.reader(f_handle)
+                return True
+        
+        except FileNotFoundError:
+            return False
+
+
+    @staticmethod
     def store_data(output_content: List[str])-> None:
+        if IOController.__file_already_exist(IOController.output_file_path):
+            IOController.is_coulumn_inserted = True
         with open(IOController.output_file_path, mode="a", newline="") as file_o:
             writer = csv.writer(file_o)
             if not IOController.is_coulumn_inserted:
@@ -60,6 +80,8 @@ class IOController:
         email_count: int, 
         social_link_count: int
     )-> None:
+        if IOController.__file_already_exist(IOController.stat_file_path):
+            IOController.is_coulumn_inserted_in_stat = True
         with open(IOController.stat_file_name, mode="a", newline="") as stat_o:
             writer = csv.writer(stat_o)
             if not IOController.is_coulumn_inserted_in_stat:
@@ -72,8 +94,15 @@ class IOController:
 
     @staticmethod
     def export_failed_result(url: str)-> None:
+        if IOController.__file_already_exist(IOController.failed_results_file_path):
+            IOController.is_coulumn_inserted_in_failed_results = True
         with open(IOController.failed_results_file_path, mode="a", newline="") as failed_o:
-            csv.writer(failed_o).writerow([url])
+            writer = csv.writer(failed_o)
+            if not IOController.is_coulumn_inserted_in_failed_results:
+                writer.writerow(["Failed Urls"])
+                IOController.is_coulumn_inserted_in_failed_results = True
+
+            writer.writerow([url])
             
 
     @staticmethod
