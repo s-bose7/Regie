@@ -3,7 +3,7 @@ import io
 import os
 from typing import List
 from datetime import date, datetime
-from urllib.parse import urlparse
+from urllib.parse import urlparse, ParseResult
 
 
 class IOController:
@@ -103,19 +103,24 @@ class IOController:
                 IOController.is_coulumn_inserted_in_failed_results = True
 
             writer.writerow([url])
-            
+
+
+    @staticmethod
+    def extract_domain(url: str, truncate_scheme: bool = True)-> str:
+        domain: str = ""
+        parsed_url: ParseResult = urlparse(url)
+        if parsed_url.netloc: 
+            domain += parsed_url.netloc
+        else: 
+            domain += parsed_url.path.split('/')[0]        
+        if not truncate_scheme: 
+            domain = parsed_url.scheme + "://" + domain
+        return domain 
+
 
     @staticmethod
     def console_log(args: List)-> None:
-        
-        def extract_domain(url: str)-> str:
-            parsed_url = urlparse(url)
-            if parsed_url.netloc:
-                return parsed_url.netloc
-            else:
-                return parsed_url.path.split('/')[0]
-        
-        domain = extract_domain(args[0])
+        domain = IOController.extract_domain(args[0])
         timestamp = datetime.now()
         print(f"[thread_id: {args[1]}] [timestamp: {timestamp}]: url:{domain}, {str(args[2]).upper()} found: {args[3]}")
 
