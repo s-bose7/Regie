@@ -16,8 +16,8 @@ def runner_service(id, target_urls: List[str])-> None:
 if __name__ == "__main__":
     io_controller: IOController = IOController()
     urls: List[str] = io_controller.read_input()
-    NUM_THREAD: int = 1
-    offset_u: int = 1
+    NUM_THREAD: int = 2
+    offset_u: int = 10
     all_threads: List[threading.Thread] = []
     for thread in range(NUM_THREAD):
         start_indx: int = thread * offset_u

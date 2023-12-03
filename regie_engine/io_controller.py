@@ -13,7 +13,7 @@ class IOController:
     is_coulumn_inserted_in_stat = False
     is_coulumn_inserted_in_failed_results = False
 
-    input_file_name: str = "input.txt"
+    input_file_name: str = "input.csv"
     output_file_name: str = "output"
     output_dir_name: str = "results_regie_run"
     output_file_path: str = ""
@@ -128,8 +128,9 @@ class IOController:
     @staticmethod
     def __do_read_urls(file: io.TextIOWrapper)-> List[str]:
         url_strings = []
-        for line_content in file.readlines():
-            line_content = line_content.strip()
+        reader = csv.reader(file)
+        for line_content in reader:
+            line_content = line_content[0].strip()
             if line_content.startswith("https://")  or line_content.startswith("http://"): 
                 url_strings.append(line_content.strip())
         

@@ -31,6 +31,7 @@ class Regie:
         self.social_link_counter = 0
         self.lock = Lock()
         self.page_html = ""
+        self.current_page_url = ""
         self.browser = self.__set_up_driver_browser()
 
 
@@ -196,6 +197,7 @@ class Regie:
             emails = re.findall(email_regex, text)
             if emails:
                 self.email_counter += len(emails)
+                emails = [", ".join(emails)]
                 emails.insert(0, url)
                 IOController.store_data(output_content=emails)
 
@@ -218,7 +220,8 @@ class Regie:
                     self.email_counter += len(emails)
                     IOController.console_log(args=[url, self.thread_id ,"email", emails])
                     row: List[str] = [email for email in emails]
-                    if "facebook" in url: row.insert(0, ""), row.append(url)
+                    row = [", ".join(row)]
+                    if "facebook" in url: row.insert(0, self.current_page_url), row.append(url)
                     else: row.insert(0, url), row.append("")
                     IOController.store_data(output_content=row)
                     # specify that we found email(s) from the current page;
@@ -281,6 +284,7 @@ class Regie:
         for url in self.target_urls:
             #TODO: perform any checks if required
             self.page_html = ""
+            self.current_page_url = url
             if self.__valid_url(url):
                 #TODO: Run type checking on the current URL
                 type: str = self.__check_url_type(url)
@@ -312,4 +316,3 @@ class Regie:
 #TODO: issues
 # 1. stat column getting written multiple times
 # 2. stat file & pdf should be in output dir
-# 3. output file formatting? 
