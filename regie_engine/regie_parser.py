@@ -5,11 +5,12 @@ import logging
 import requests
 import pdfplumber
 
+from pandas import DataFrame, Series
 from datetime import datetime
 from browser import Browser
 from io_controller import IOController
 from threading import Lock
-from typing import List, Any, Set, Dict
+from typing import List, Any, Set, Dict, Optional
 from bs4 import BeautifulSoup as Bs
 
 from requests.exceptions import ConnectionError, HTTPError
@@ -23,16 +24,16 @@ class Regie:
     # Regex parser to find EMAILS from any WEBSITE/PDF url 
     def __init__(self, 
         thread_id: int, 
-        target_urls: List, 
+        target_urls: DataFrame,
         instruction: Dict[str, bool],
     ) -> None:
+        # Attributes for a single thread
         self.thread_id = thread_id
         self.target_urls = target_urls
         self.email_counter = 0
         self.social_link_counter = 0
         self.lock = Lock()
         self.page_html = ""
-        self.current_page_url = ""
         self.instruction = instruction
         self.browser = self.__set_up_driver_browser()
 
@@ -61,7 +62,6 @@ class Regie:
 
             except WebDriverException as WE:
                 logging.error(f"Something wrong with the website's server - {url}\n")
-                IOController.export_failed_result(url=url)
                 break
 
         return 500
@@ -82,10 +82,6 @@ class Regie:
     def __parse_html(self)-> str:
         html = self.browser.page_source
         return html
-    
-
-    def __non_ws(self, s) -> str: 
-        return s.replace("\n", "").replace(" ", "")
 
 
     def __email_parser(self, html_content: Any) ->List[Any]:
@@ -94,7 +90,7 @@ class Regie:
         Obscure address formats, Internationalized domain names
         '''
         def email_is_junk(email: Any)-> bool:
-            for junk_c in ["wix", "io", "wixpress", "sentry", "jpg", "png", "jpeg"]:
+            for junk_c in ["wix", "io", "wixpress", "sentry", "jpg", "png", "jpeg", "gif"]:
                 if junk_c in email:
                     return True
                      
@@ -144,28 +140,15 @@ class Regie:
         return facebook_link
 
 
-    def __get_status_code(self, url: str)->int:
-        try:
-            response = requests.get(url)
-            return response.status_code
-        except (ConnectionError, HTTPError):
-            return 500
-
-
     def __valid_url(self, url: str)->bool:
-        # url_format_regex = r"^((https?)://)?(([a-zA-Z0-9\.-]+\.)+[a-zA-Z]{2,})$"
-        domain = IOController.extract_domain(url)
-        # server_status_code = self.__get_status_code(url)
-        if (
-            isinstance(url, str) and 
-            url.startswith(('http://', 'https://')) and
-            # re.match(url_format_regex, url) and
-            domain != "docs.google.com"
-            # server_status_code == 200 
-        ):
-            return True
-    
-        return False
+        if not isinstance(url, str):
+            return False
+        if not url.startswith(('http://', 'https://')):
+            return False
+        if IOController.extract_domain(url) == "docs.google.com":
+            return False
+
+        return True
     
 
     def __check_url_type(self, url: str)-> str:
@@ -189,7 +172,7 @@ class Regie:
         
         return success
     
-    def __run_pdf_extractor_service(self, url: str)-> None:
+    def __run_pdf_extractor_service(self, index: int)-> None:
         email_regex = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
         with pdfplumber.open("temp_pdf_downloader_service.pdf") as pdf:
             text: str = ""
@@ -200,11 +183,19 @@ class Regie:
             if emails:
                 self.email_counter += len(emails)
                 emails = [", ".join(emails)]
-                emails.insert(0, url)
-                IOController.store_data(output_content=emails)
+                emails.append("")
+                IOController.store_data(index=index, content=emails)
 
 
-    def __run_website_extractor_service(self, url: str)-> int:
+    def __run_website_extractor_service(
+        self, 
+        row: Optional[Series], 
+        index: int, 
+        sec_url: Optional[str]
+    )-> int:
+        
+        if row is not None: url = row["website"]
+        else: url = sec_url
         status_code = self.__get_response_with_retries(url=url)
         if status_code == 200:
             #TODO: get the text from the current page
@@ -221,35 +212,45 @@ class Regie:
                 with self.lock:
                     self.email_counter += len(emails)
                     IOController.console_log(args=[url, self.thread_id ,"email", emails])
-                    row: List[str] = [email for email in emails]
-                    row = [", ".join(row)]
-                    if "facebook" in url: row.insert(0, self.current_page_url), row.append(url)
-                    else: row.insert(0, url), row.append("")
-                    IOController.store_data(output_content=row)
+                    collected_emails: List[str] = [email for email in emails]
+                    collected_emails = [", ".join(collected_emails)]
+                    if "facebook" in url: collected_emails.append(url)
+                    else: collected_emails.append("")
+                    IOController.store_data(index=index, content=collected_emails)
                     # specify that we found email(s) from the current page;
                     # store it and move on 
                     return 1
         else:
-            IOController.export_failed_result(url=url)
             # specify that website is not responsive; so move on
             return 2
     
 
-    def __do_run_service(self, url: str, type: str)-> None:
+    def __do_run_service(self,row: Series, type: str, index: int)-> None:
         # redirect to respective extractor service based on URL type
         if type == "pdf" and not self.instruction["ignore_pdf_urls"]: 
-            self.__run_pdf_extractor_service(url) 
+            self.__run_pdf_extractor_service(index) 
             return
         
-        home_page_service_code: int = self.__run_website_extractor_service(url)
+        home_page_service_code: int = self.__run_website_extractor_service(
+            row=row, 
+            index=index,
+            sec_url=None
+        )
         if home_page_service_code == 0:
             #TODO:Find /contact-us link
-            contact_link = self.__contact_link_finder(root_page_html=self.page_html, base_url=url)
+            contact_link = self.__contact_link_finder(
+                root_page_html=self.page_html, 
+                base_url=row["website"]
+            )
             #TODO: Find /facebook link
             social_link = self.__social_link_finder(root_page_html=self.page_html)
 
             if contact_link != "None":
-                contact_service_code = self.__run_website_extractor_service(contact_link)
+                contact_service_code = self.__run_website_extractor_service(
+                    row=None,
+                    index=index, 
+                    sec_url=contact_link
+                )
                 if (
                     contact_service_code == 0 and 
                     social_link != "None" and
@@ -257,40 +258,45 @@ class Regie:
                 ): 
                     # email not found from contact-us page
                     # we have a social link to check
-                    social_service_code = self.__run_website_extractor_service(social_link)
+                    social_service_code = self.__run_website_extractor_service(
+                        row=None,
+                        index=index, 
+                        sec_url=social_link
+                    )
                     if social_service_code == 0 or social_service_code == 2: 
                         # No email in social page, probably due to a blockage from fb
                         # store social link for crawlbaseAPI
                         with self.lock:
                             self.social_link_counter += 1
-                            row = [url, "", social_link]
-                            IOController.store_data(output_content=row)
+                            IOController.store_data(index=index, content=["", social_link])
                 else:
                     # email not found from contact-us page
                     # social link not found
-                    if contact_service_code == 0:
-                        with self.lock: IOController.export_failed_result(url)
+                    return
 
             elif social_link != "None" and not self.instruction["ignore_facebook_urls"]:
-                social_service_code = self.__run_website_extractor_service(social_link)
+                social_service_code = self.__run_website_extractor_service(
+                    row=None,
+                    index=index, 
+                    sec_url=social_link
+                )
                 if social_service_code == 0 or social_service_code == 2: 
                     # No email in social page, probably due to a blockage from fb
                     # store social link for crawlbaseAPI
                     with self.lock:
                         self.social_link_counter += 1
-                        row = [url, "", social_link]
-                        IOController.store_data(output_content=row)
+                        IOController.store_data(index=index, content=["", social_link])
             else:
                 # email not found from home page
                 # There's no contact link and social link
-                with self.lock: IOController.export_failed_result(url)
+                return
                         
 
     def run_service(self):
-        for url in self.target_urls:
+        for index, row in self.target_urls.iterrows():
+            url = row["website"]
             #TODO: perform any checks if required
             self.page_html = ""
-            self.current_page_url = url
             if self.__valid_url(url):
                 #TODO: Run type checking on the current URL
                 type: str = self.__check_url_type(url)
@@ -301,13 +307,11 @@ class Regie:
                         continue
                 
                 #TODO: Implementation of the main extraction module
-                self.__do_run_service(url, type)
+                self.__do_run_service(row, type, index)
                     
             else:
                 logging.error(f"Invalid URL: {url}")
-                IOController.export_failed_result(url=url)
                 # raise TypeError
-                continue
             
         # target reached for thread: thread_id: int
         with self.lock:
@@ -318,7 +322,3 @@ class Regie:
                 email_count=self.email_counter,
                 social_link_count=self.social_link_counter
             )
-
-#TODO: issues
-# 1. stat column getting written multiple times
-# 2. stat file & pdf should be in output dir

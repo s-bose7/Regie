@@ -1,6 +1,7 @@
 import csv
-import io
 import os
+import pandas as pd
+from pandas import DataFrame, Series
 from typing import List
 from datetime import date, datetime
 from urllib.parse import urlparse, ParseResult
@@ -9,42 +10,17 @@ from urllib.parse import urlparse, ParseResult
 class IOController:
 
     # static shared variables
-    is_coulumn_inserted = False
+    output_df: DataFrame = None 
     is_coulumn_inserted_in_stat = False
-    is_coulumn_inserted_in_failed_results = False
-
-    input_file_name: str = "Columbus_yelp_actor_run.csv"
-    output_file_name: str = "output"
-    output_dir_name: str = "results_regie_run"
-    output_file_path: str = ""
-    failed_results_file_name: str = "regie_failed_results_run"
-    failed_results_file_path: str = ""
+    # pass the input file name
+    input_file_name: str = "Regie_test.csv"
     stat_file_name: str = "email_collection_stats.csv"
-    stat_file_path: str = ""
 
 
     def __init__(self) -> None:
-
-        try:
-            os.makedirs(IOController.output_dir_name)
-        except FileExistsError:
-            pass
-        
-        IOController.output_file_name += f"_{date.isoformat(datetime.now())}.csv"
-        IOController.failed_results_file_name += f"_{date.isoformat(datetime.now())}.csv"
-
-        IOController.output_file_path = os.path.join(
-            IOController.output_dir_name,
-            IOController.output_file_name
-        )
-        IOController.stat_file_path = os.path.join(
-            IOController.output_dir_name,
-            IOController.stat_file_name
-        )
-        IOController.failed_results_file_path = os.path.join(
-            IOController.output_dir_name,
-            IOController.failed_results_file_name
-        )
+        IOController.output_df = IOController.read_input()
+        IOController.output_df["emails"] = None
+        IOController.output_df["social_links"] = None
 
 
     @staticmethod
@@ -59,17 +35,15 @@ class IOController:
 
 
     @staticmethod
-    def store_data(output_content: List[str])-> None:
-        if IOController.__file_already_exist(IOController.output_file_path):
-            IOController.is_coulumn_inserted = True
-        with open(IOController.output_file_path, mode="a", newline="") as file_o:
-            writer = csv.writer(file_o)
-            if not IOController.is_coulumn_inserted:
-                df_column: List[str] = ["Url", "Email", "Social link"]
-                writer.writerow(df_column)
-                IOController.is_coulumn_inserted = True
-
-            writer.writerow(output_content)    
+    def store_data(index: int, content: List[str])-> None:
+        IOController.output_df.at[index, "emails"] = content[0]
+        IOController.output_df.at[index, "social_links"] = content[1]
+    
+    
+    @staticmethod
+    def write_csv():
+        if IOController.output_df is not None:
+            IOController.output_df.to_csv(f"regie_results_run_{date.isoformat(datetime.now())}.csv")
 
 
     @staticmethod
@@ -80,7 +54,7 @@ class IOController:
         email_count: int, 
         social_link_count: int
     )-> None:
-        if IOController.__file_already_exist(IOController.stat_file_path):
+        if IOController.__file_already_exist(IOController.stat_file_name):
             IOController.is_coulumn_inserted_in_stat = True
         with open(IOController.stat_file_name, mode="a", newline="") as stat_o:
             writer = csv.writer(stat_o)
@@ -90,19 +64,6 @@ class IOController:
                 IOController.is_coulumn_inserted_in_stat = True
             
             writer.writerow([thread_id, timestamp,total_url_passed, email_count, social_link_count])
-    
-
-    @staticmethod
-    def export_failed_result(url: str)-> None:
-        if IOController.__file_already_exist(IOController.failed_results_file_path):
-            IOController.is_coulumn_inserted_in_failed_results = True
-        with open(IOController.failed_results_file_path, mode="a", newline="") as failed_o:
-            writer = csv.writer(failed_o)
-            if not IOController.is_coulumn_inserted_in_failed_results:
-                writer.writerow(["Failed Urls"])
-                IOController.is_coulumn_inserted_in_failed_results = True
-
-            writer.writerow([url])
 
 
     @staticmethod
@@ -126,28 +87,12 @@ class IOController:
 
 
     @staticmethod
-    def __do_read_urls(file: io.TextIOWrapper)-> List[str]:
-        url_strings = []
-        reader = csv.reader(file)
-        for line_content in reader:
-            if len(line_content) < 6: 
-                continue 
-            line_content = line_content[5].strip()
-            if line_content.startswith("https://")  or line_content.startswith("http://"): 
-                url_strings.append(line_content.strip())
-    
-        return url_strings
-
-
-    @staticmethod
-    def read_input()-> List[str]:
+    def read_input()-> DataFrame:
         try:
-            urls: List[str] = []
-            with open(IOController.input_file_name, mode='r', newline="") as file_i:
-                urls.extend(IOController.__do_read_urls(file_i))
-
+            input_df: DataFrame = pd.read_csv(
+                filepath_or_buffer=IOController.input_file_name
+            )
+            return input_df
         except FileNotFoundError:
             print("Input file not found or path is incorrect.\n") 
             return
-        
-        return urls
