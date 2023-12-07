@@ -9,7 +9,7 @@ from datetime import datetime
 from browser import Browser
 from io_controller import IOController
 from threading import Lock
-from typing import List, Any, Set
+from typing import List, Any, Set, Dict
 from bs4 import BeautifulSoup as Bs
 
 from requests.exceptions import ConnectionError, HTTPError
@@ -24,6 +24,7 @@ class Regie:
     def __init__(self, 
         thread_id: int, 
         target_urls: List, 
+        instruction: Dict[str, bool],
     ) -> None:
         self.thread_id = thread_id
         self.target_urls = target_urls
@@ -32,6 +33,7 @@ class Regie:
         self.lock = Lock()
         self.page_html = ""
         self.current_page_url = ""
+        self.instruction = instruction
         self.browser = self.__set_up_driver_browser()
 
 
@@ -235,7 +237,7 @@ class Regie:
 
     def __do_run_service(self, url: str, type: str)-> None:
         # redirect to respective extractor service based on URL type
-        if type == "pdf": 
+        if type == "pdf" and not self.instruction["ignore_pdf_urls"]: 
             self.__run_pdf_extractor_service(url) 
             return
         
@@ -248,7 +250,11 @@ class Regie:
 
             if contact_link != "None":
                 contact_service_code = self.__run_website_extractor_service(contact_link)
-                if contact_service_code == 0 and social_link != "None": 
+                if (
+                    contact_service_code == 0 and 
+                    social_link != "None" and
+                    not self.instruction["ignore_facebook_urls"]
+                ): 
                     # email not found from contact-us page
                     # we have a social link to check
                     social_service_code = self.__run_website_extractor_service(social_link)
@@ -265,7 +271,7 @@ class Regie:
                     if contact_service_code == 0:
                         with self.lock: IOController.export_failed_result(url)
 
-            elif social_link != "None":
+            elif social_link != "None" and not self.instruction["ignore_facebook_urls"]:
                 social_service_code = self.__run_website_extractor_service(social_link)
                 if social_service_code == 0 or social_service_code == 2: 
                     # No email in social page, probably due to a blockage from fb
@@ -288,7 +294,7 @@ class Regie:
             if self.__valid_url(url):
                 #TODO: Run type checking on the current URL
                 type: str = self.__check_url_type(url)
-                if type == "pdf": 
+                if type == "pdf" and not self.instruction["ignore_pdf_urls"]: 
                     status = self.__run_pdf_downloader_service(url)
                     # If download status failed due to server error, we'll move on
                     if status == 1: 

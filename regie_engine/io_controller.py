@@ -13,7 +13,7 @@ class IOController:
     is_coulumn_inserted_in_stat = False
     is_coulumn_inserted_in_failed_results = False
 
-    input_file_name: str = "input.csv"
+    input_file_name: str = "Columbus_yelp_actor_run.csv"
     output_file_name: str = "output"
     output_dir_name: str = "results_regie_run"
     output_file_path: str = ""
@@ -130,10 +130,12 @@ class IOController:
         url_strings = []
         reader = csv.reader(file)
         for line_content in reader:
-            line_content = line_content[0].strip()
+            if len(line_content) < 6: 
+                continue 
+            line_content = line_content[5].strip()
             if line_content.startswith("https://")  or line_content.startswith("http://"): 
                 url_strings.append(line_content.strip())
-        
+    
         return url_strings
 
 
@@ -145,7 +147,7 @@ class IOController:
                 urls.extend(IOController.__do_read_urls(file_i))
 
         except FileNotFoundError:
-            print("File not found or path is incorrect.\n") 
+            print("Input file not found or path is incorrect.\n") 
             return
         
         return urls
