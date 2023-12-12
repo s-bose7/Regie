@@ -87,7 +87,6 @@ class Regie:
 
         except AttributeError:
             facebook_link = "None"
-
         return facebook_link
 
 
@@ -130,7 +129,6 @@ class Regie:
             text: str = ""
             for page in pdf.pages:
                 text += page.extract_text()
-
             emails = re.findall(email_regex, text)
             if emails:
                 self.email_counter += len(emails)

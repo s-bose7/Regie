@@ -2,6 +2,7 @@ import asyncio
 from typing import List, Dict
 from pyppeteer import launch
 from regie_parser import Regie 
+from pandas import DataFrame
 from io_controller import IOController
 
 #NOTE: Always export/remove the 'stats/output.csv' from 'stats' folder before running a new dataset

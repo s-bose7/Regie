@@ -10,7 +10,7 @@ from urllib.parse import urlparse,  ParseResult
 class IOController:
 
     # static shared variables
-    is_coulumn_inserted = False
+    output_df: DataFrame = None 
     is_coulumn_inserted_in_stat = False
     is_coulumn_inserted_in_stat_history = False
 
