@@ -3,7 +3,7 @@ import os
 import pandas as pd
 from pandas import DataFrame
 from typing import List, Any
-from datetime import date, datetime
+from datetime import datetime
 from urllib.parse import urlparse,  ParseResult
 
 
@@ -28,6 +28,8 @@ class IOController:
     stat_history_file_name: str = "email_collection_stats_prior.csv"
     stat_history_file_path: str = ""
 
+    pdf_file_name = "temp_pdf_downloader_service.pdf"
+    pdf_file_path = ""
 
     def __init__(self) -> None:
 
@@ -44,6 +46,9 @@ class IOController:
         )
         IOController.stat_history_file_path = os.path.join(
             IOController.output_dir_name, IOController.stat_history_file_name
+        )
+        IOController.pdf_file_path = os.path.join(
+            IOController.output_dir_name, IOController.pdf_file_name
         )
 
 
@@ -180,9 +185,5 @@ class IOController:
         df_1: DataFrame = pd.read_csv(IOController.input_file_name)
         df_2: DataFrame = pd.read_csv(IOController.output_file_path)
         merged_df = pd.merge(df_1, df_2, on='website', how='inner')
-        # merged_df['website'].fillna('UNKNOWN', inplace=True)
-        # Sort the merged DataFrame based on the order of 'df_1' in the 'website' column
-        # merged_df['website'] = pd.Categorical(merged_df['website'], categories=df_1['website'])
-        # merged_df = merged_df.sort_values('website')
         merged_df.to_csv(IOController.input_file_name+"_results.csv", index=False)
 
