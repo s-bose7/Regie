@@ -1,49 +1,46 @@
 import asyncio
-from typing import List, Dict
-from pyppeteer import launch
+from typing import List, Dict, Tuple
 from regie_parser import Regie 
 from pandas import DataFrame
+
 from io_controller import IOController
+from crawlbase import CrawlBaseAPI
 
-#NOTE: Always export/remove the 'stats/output.csv' from 'stats' folder before running a new dataset
 
-
-async def runner_service(id, target_urls, browser)-> None:
+async def runner_service(id: int, urls: DataFrame, bound: Tuple[int])-> None:
     print(f"Running service for thread_id: {id}")
+    urls = urls.iloc[bound[0]:bound[1]]
     # Pass custom instructions
     instruction: Dict = {
+        "target_col_name": "website",
         "ignore_pdf_urls": False,
         "ignore_facebook_urls": False,
     }
     parser = Regie(
         thread_id=id,
-        main_browser=browser, 
-        target_urls=target_urls,
-        instruction=instruction,
+        target_df=urls,
+        instruction=instruction
     )
     await parser.run_service()
 
 
 async def main():
     io_controller = IOController()
-    urls = io_controller.read_input(col_name="website")
-    browser = await launch()
-
+    urls: DataFrame = io_controller.read_input(io_controller.input_file_name)
     NUM_THREAD = 4
-    offset_u = len(urls) // NUM_THREAD
-
+    offset_u = len(urls)//NUM_THREAD
     tasks: List = []
     for i in range(NUM_THREAD):
         start_index = i * offset_u
-        stop_index = start_index + offset_u if i < NUM_THREAD - 1 else len(urls)
-        target_urls = urls[start_index:stop_index]
-        tasks.append(runner_service(i, target_urls, browser))
+        stop_index = start_index + offset_u 
+        tasks.append(runner_service(i, urls, (start_index, stop_index)))
 
     await asyncio.gather(*tasks)
     IOController.store_stat_history()
-    IOController.merge_results()
-    await browser.close()
-    print("\nALL TASKS HAVE BEEN JOINED, ENDCODE 0\n")
+    print("\nREGIE: All tasks have been joined\n")
+    # An extra API layer on top of Regie to parse emails specifically from fb pages
+    cbase_api = CrawlBaseAPI()
+    cbase_api.run_crawlbase_service()
 
 
 if __name__ == "__main__":

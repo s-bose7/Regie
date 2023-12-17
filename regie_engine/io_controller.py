@@ -1,5 +1,6 @@
 import csv
 import os
+import chardet
 import pandas as pd
 from pandas import DataFrame
 from typing import List, Any
@@ -10,45 +11,41 @@ from urllib.parse import urlparse,  ParseResult
 class IOController:
 
     # static shared variables
-    output_df: DataFrame = None 
+    is_coulumn_inserted = False    
     is_coulumn_inserted_in_stat = False
     is_coulumn_inserted_in_stat_history = False
 
-    # Enter the input file name here
-    input_file_name: str = "Regie_test.csv"
-    
-    output_file_name: str = "output"
-    output_dir_name: str = "stats"
-    output_file_path: str = ""
+    # set the i/o file name here
+    input_file_name: str = "test.csv"
+    output_file_name: str = "regie_output_run.csv"
+    input_file_columns: List = []
     
     # For live updates for monitoring
-    stat_file_name: str = "email_collection_stats_latest.csv"
+    stat_dir_name: str = "stats"
+    stat_file_name: str = "email_collection_stats_live.csv"
     stat_file_path: str = ""
     # For future reference and logging 
     stat_history_file_name: str = "email_collection_stats_prior.csv"
     stat_history_file_path: str = ""
 
-    pdf_file_name = "temp_pdf_downloader_service.pdf"
-    pdf_file_path = ""
+    pdf_file_name: str = "(temp)_pdf_downloader_service.pdf"
+    pdf_file_path: str = ""
 
     def __init__(self) -> None:
 
         try:
-            os.makedirs(IOController.output_dir_name)
+            os.makedirs(IOController.stat_dir_name)
         except FileExistsError:
             pass
 
-        IOController.output_file_path = os.path.join(
-            IOController.output_dir_name, IOController.output_file_name
-        )
         IOController.stat_file_path = os.path.join(
-            IOController.output_dir_name, IOController.stat_file_name
+            IOController.stat_dir_name, IOController.stat_file_name
         )
         IOController.stat_history_file_path = os.path.join(
-            IOController.output_dir_name, IOController.stat_history_file_name
+            IOController.stat_dir_name, IOController.stat_history_file_name
         )
         IOController.pdf_file_path = os.path.join(
-            IOController.output_dir_name, IOController.pdf_file_name
+            IOController.stat_dir_name, IOController.pdf_file_name
         )
 
 
@@ -65,12 +62,13 @@ class IOController:
 
     @staticmethod
     def store_data(output_content: List[str])-> None:
-        if IOController.__file_already_exist(IOController.output_file_path):
+        if IOController.__file_already_exist(IOController.output_file_name):
             IOController.is_coulumn_inserted = True
-        with open(IOController.output_file_path, mode="a", newline="") as file_o:
+        with open(IOController.output_file_name, mode="a", newline="") as file_o:
             writer = csv.writer(file_o)
             if not IOController.is_coulumn_inserted:
-                df_column: List[str] = ["website", "email", "social link"]
+                df_column: List[str] = IOController.input_file_columns
+                df_column.append("emails"), df_column.append("social_handle")
                 writer.writerow(df_column)
                 IOController.is_coulumn_inserted = True
 
@@ -83,11 +81,19 @@ class IOController:
         last_updated: datetime,
         total_url_passed: int,
         email_count: int, 
-        social_link_count: int
+        social_link_count: int,
+        completed_urls: int, 
+        total_requests: int,
     )-> None:
         stat_data: List[List[Any]] = []
         stat_df_column: List[str] = [
-            "thread_id", "last_updated","total_url_passed", "email_found", "social_link_found"
+            "thread_id", 
+            "last_updated",
+            "total_url_passed", 
+            "email_found", 
+            "social_link_found", 
+            "completed_urls", 
+            "total_requests",
         ]
         found = False
         if IOController.__file_already_exist(IOController.stat_file_path):
@@ -103,6 +109,8 @@ class IOController:
                     row[2] = total_url_passed
                     row[3] = email_count
                     row[4] = social_link_count
+                    row[5] = completed_urls
+                    row[6] = total_requests
                     found = True
                     break
         
@@ -113,7 +121,9 @@ class IOController:
                 last_updated, 
                 total_url_passed, 
                 email_count, 
-                social_link_count
+                social_link_count,
+                completed_urls,
+                total_requests,
             ])
         
         with open(IOController.stat_file_path, mode="w", newline="") as stat_o:
@@ -144,7 +154,7 @@ class IOController:
             writer = csv.writer(stat_history)
             if not IOController.is_coulumn_inserted_in_stat_history:
                 stat_df_column: List[str] = [
-                    "thread_id", "last_updated","total_url_passed", "email_found", "social_link_found"
+                    "thread_id", "last_updated","total_url_passed", "email_found", "social_link_found", "completed_urls"
                 ]
                 writer.writerow(stat_df_column)
                 IOController.is_coulumn_inserted_in_stat_history = True
@@ -169,21 +179,18 @@ class IOController:
     def console_log(args: List)-> None: 
         domain = IOController.extract_domain(args[0])
         timestamp = datetime.now()
-        print(f"[thread_id: {args[1]}] [timestamp: {timestamp}]: url:{domain}, {str(args[2]).upper()} found: {args[3]}")
+        print(f"[thread_{args[1]}] [timestamp: {timestamp}]: url:{domain}, {args[2]} found: {args[3]}")
 
 
     @staticmethod
-    def read_input(col_name: str)-> List[str]:
-        input_df: DataFrame = pd.read_csv(IOController.input_file_name)
-        urls: List[str] = input_df[col_name].tolist()
-        return urls
+    def read_input(file_path: str)-> DataFrame:
+        with open(file_path, 'rb') as f:
+            result = chardet.detect(f.read())
+        
+        input_df: DataFrame = pd.read_csv(file_path, encoding=result['encoding'])
+        if file_path == IOController.input_file_name:
+            IOController.input_file_columns = input_df.columns.tolist()
+        return input_df
     
 
-    @staticmethod
-    def merge_results()->None:
-        # Merge based on 'website' column
-        df_1: DataFrame = pd.read_csv(IOController.input_file_name)
-        df_2: DataFrame = pd.read_csv(IOController.output_file_path)
-        merged_df = pd.merge(df_1, df_2, on='website', how='inner')
-        merged_df.to_csv(IOController.input_file_name+"_results.csv", index=False)
 
