@@ -10,10 +10,11 @@ import io_controller
 
 class CrawlBaseAPI:
     #NOTE: Link to docs - https://crawlbase.com/docs/scraper-api/
-    TOKEN = "04NRCCTqE5iA1QbtVimWBg"
+    TOKEN = "tntnsjKU1IIKiYIXlZZrqQ"
     ENDPOINT = "https://api.crawlbase.com/scraper"
     
     def __init__(self) -> None:
+        self.new_rows: List = []
         self.output_df: DataFrame = io_controller.IOController.read_input(
             file_path=io_controller.IOController.output_file_name
         )
@@ -51,7 +52,8 @@ class CrawlBaseAPI:
         lock = threading.Lock()
         for index, row in targeted_df.iterrows():
             fb_page_url = row["social_handle"]
-            if pd.isna(fb_page_url):
+            if pd.isna(fb_page_url) or fb_page_url == "":
+                self.new_rows.append(row)
                 continue
             
             email: str = ""
@@ -59,12 +61,12 @@ class CrawlBaseAPI:
                 email = self.__check_for_emails(fb_page_url)
             
             if len(email) == 0:
-                return
+                self.new_rows.append(row)
+                continue
             
-            with lock:  
-                row["emails"] = email
-                self.final_output_df.append(row, ignore_index=True)
-                print(f"[thread_{thread_id}] [{email}] found for url {fb_page_url}")
+            row["emails"] = email
+            self.new_rows.append(row)
+            print(f"[thread_{thread_id}] [{email}] found for url {fb_page_url}")
 
 
     def run_crawlbase_service(self)->None:
@@ -86,6 +88,7 @@ class CrawlBaseAPI:
         for thread in task_queue:
             thread.join()
         
+        self.final_output_df = self.final_output_df.append(self.new_rows, ignore_index=True)
         self.final_output_df.to_csv("final_output_regie.csv")
         print("\nCRAWLBASE: All tasks have been joined.\n")
 
