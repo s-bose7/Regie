@@ -177,8 +177,11 @@ class Regie:
                         return html
                     else:
                         print(f"Failed to fetch URL: {url}. Status code: {response.status}")
+                        IOController.store_data(output_content=self.current_row.tolist())
+
             except aiohttp.ClientError as e:
                 print(f"Error fetching URL: {url}. Error: {e}")
+                IOController.store_data(output_content=self.current_row.tolist())
         
         return None
     
@@ -253,6 +256,7 @@ class Regie:
             self.current_page_url = url
             self.current_row = row
             if not self.__valid_url(url): 
+                IOController.store_data(output_content=self.current_row.tolist())
                 continue
 
             #TODO: Run type checking on the current URL
@@ -261,6 +265,7 @@ class Regie:
                 status = self.__run_pdf_downloader_service(url)
                 # If download status failed due to server error, we'll move on
                 if status == 1: 
+                    IOController.store_data(output_content=self.current_row.tolist())
                     continue
 
             #TODO: Implementation of the main extraction module
