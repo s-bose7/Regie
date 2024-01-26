@@ -4,7 +4,6 @@ from regie_parser import Regie
 from pandas import DataFrame
 
 from io_controller import IOController
-from crawlbase import CrawlBaseAPI
 
 
 async def runner_service(id: int, urls: DataFrame, bound: Tuple[int])-> None:
@@ -38,9 +37,6 @@ async def main():
     await asyncio.gather(*tasks)
     IOController.store_stat_history()
     print("\nREGIE: All tasks have been joined\n")
-    # An extra API layer on top of Regie to parse emails specifically from fb pages
-    cbase_api = CrawlBaseAPI()
-    cbase_api.run_crawlbase_service()
 
 
 if __name__ == "__main__":

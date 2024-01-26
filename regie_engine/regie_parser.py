@@ -238,11 +238,12 @@ class Regie:
             ): 
                 # email not found from contact-us page
                 # pass social link to crawlbaseAPI to find emails
+                email = CrawlBaseAPI.email_finder(self.thread_id, social_link)
                 with self.lock:
                     self.social_link_counter += 1
                     row = self.current_row.tolist()
                     IOController.console_log(args=[url, self.thread_id ,"social_link", social_link])
-                    row.append(""), row.append(social_link)
+                    row.append(email), row.append(social_link)
                     IOController.store_data(output_content=row)
 
 

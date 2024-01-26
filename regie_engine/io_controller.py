@@ -4,7 +4,7 @@ import chardet
 import pandas as pd
 from pandas import DataFrame
 from typing import List, Any
-from datetime import datetime
+from datetime import datetime, date
 from urllib.parse import urlparse,  ParseResult
 
 
@@ -17,7 +17,7 @@ class IOController:
 
     # set the i/o file name here
     input_file_name: str = "test.csv"
-    output_file_name: str = "regie_output_run.csv"
+    output_file_name: str = "YELP_FINAL_DATA"
     input_file_columns: List = []
     
     # For live updates for monitoring
@@ -37,6 +37,8 @@ class IOController:
             os.makedirs(IOController.stat_dir_name)
         except FileExistsError:
             pass
+        
+        IOController.output_file_name += f"_{date.today()}.csv" 
 
         IOController.stat_file_path = os.path.join(
             IOController.stat_dir_name, IOController.stat_file_name
