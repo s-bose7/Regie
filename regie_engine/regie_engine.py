@@ -1,45 +1,48 @@
-import threading
-from typing import List, Dict
+import asyncio
+from typing import List, Dict, Tuple
 from regie_parser import Regie 
 from pandas import DataFrame
+
 from io_controller import IOController
 
 
-def runner_service(id, target_urls: DataFrame)-> None:
+async def runner_service(id: int, urls: DataFrame, bound: Tuple[int])-> None:
     print(f"Running service for thread_id: {id}")
-    # Enter your custom changes on URL type here 
+    urls = urls.iloc[bound[0]:bound[1]]
+    # Pass custom instructions
     instruction: Dict = {
+        "target_col_name": "website",
         "ignore_pdf_urls": False,
         "ignore_facebook_urls": False,
     }
     parser = Regie(
-        thread_id=id, 
-        target_urls=target_urls,
-        instruction=instruction,
+        thread_id=id,
+        target_df=urls,
+        instruction=instruction
     )
-    parser.run_service()
+    await parser.run_service()
+
+
+async def main():
+    io_controller = IOController()
+    urls: DataFrame = io_controller.read_input(io_controller.input_file_name)
+    NUM_THREAD = 4
+    offset_u = len(urls)//NUM_THREAD
+    tasks: List = []
+    for i in range(NUM_THREAD):
+        start_index = i * offset_u
+        stop_index = start_index + offset_u 
+        tasks.append(runner_service(i, urls, (start_index, stop_index)))
+
+    await asyncio.gather(*tasks)
+    IOController.store_stat_history()
+    print("\nREGIE: All tasks have been joined\n")
 
 
 if __name__ == "__main__":
-    io_controller: IOController = IOController()
-    # pass the coulmn name that has the input urls; i.e. "website", "urls", "links"
-    urls: DataFrame = io_controller.read_input()
-    NUM_THREAD: int = 2
-    # Enter how many links should each thread take
-    offset_u: int = int(len(urls)/NUM_THREAD)
-    all_threads: List[threading.Thread] = []
-    for thread in range(NUM_THREAD):
-        start_indx: int = thread * offset_u
-        stop_indx: int = start_indx + offset_u
-        thread = threading.Thread(
-            target=runner_service, 
-            args=(thread, urls.iloc[start_indx:stop_indx])
-        )
-        thread.start()
-        all_threads.append(thread)
+    loop = asyncio.get_event_loop()
+    try:
+        loop.run_until_complete(main())
+    finally:
+        loop.close()
 
-    for therad in all_threads:
-        therad.join()
-    
-    IOController.write_csv()
-    print("\nALL THREADS HAVE BEEN JOINED, ENDCODE 0\n")

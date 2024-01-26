@@ -1,26 +1,54 @@
 import csv
 import os
+import chardet
 import pandas as pd
-from pandas import DataFrame, Series
-from typing import List
-from datetime import date, datetime
-from urllib.parse import urlparse, ParseResult
+from pandas import DataFrame
+from typing import List, Any
+from datetime import datetime, date
+from urllib.parse import urlparse,  ParseResult
 
 
 class IOController:
 
     # static shared variables
-    output_df: DataFrame = None 
+    is_coulumn_inserted = False    
     is_coulumn_inserted_in_stat = False
-    # pass the input file name
-    input_file_name: str = "Regie_test.csv"
-    stat_file_name: str = "email_collection_stats.csv"
+    is_coulumn_inserted_in_stat_history = False
 
+    # set the i/o file name here
+    input_file_name: str = "test.csv"
+    output_file_name: str = "YELP_FINAL_DATA"
+    input_file_columns: List = []
+    
+    # For live updates for monitoring
+    stat_dir_name: str = "stats"
+    stat_file_name: str = "email_collection_stats_live.csv"
+    stat_file_path: str = ""
+    # For future reference and logging 
+    stat_history_file_name: str = "email_collection_stats_prior.csv"
+    stat_history_file_path: str = ""
+
+    pdf_file_name: str = "(temp)_pdf_downloader_service.pdf"
+    pdf_file_path: str = ""
 
     def __init__(self) -> None:
-        IOController.output_df = IOController.read_input()
-        IOController.output_df["emails"] = None
-        IOController.output_df["social_links"] = None
+
+        try:
+            os.makedirs(IOController.stat_dir_name)
+        except FileExistsError:
+            pass
+        
+        IOController.output_file_name += f"_{date.today()}.csv" 
+
+        IOController.stat_file_path = os.path.join(
+            IOController.stat_dir_name, IOController.stat_file_name
+        )
+        IOController.stat_history_file_path = os.path.join(
+            IOController.stat_dir_name, IOController.stat_history_file_name
+        )
+        IOController.pdf_file_path = os.path.join(
+            IOController.stat_dir_name, IOController.pdf_file_name
+        )
 
 
     @staticmethod
@@ -35,35 +63,105 @@ class IOController:
 
 
     @staticmethod
-    def store_data(index: int, content: List[str])-> None:
-        IOController.output_df.at[index, "emails"] = content[0]
-        IOController.output_df.at[index, "social_links"] = content[1]
-    
-    
-    @staticmethod
-    def write_csv():
-        if IOController.output_df is not None:
-            IOController.output_df.to_csv(f"regie_results_run_{date.isoformat(datetime.now())}.csv")
+    def store_data(output_content: List[str])-> None:
+        if IOController.__file_already_exist(IOController.output_file_name):
+            IOController.is_coulumn_inserted = True
+        with open(IOController.output_file_name, mode="a", newline="") as file_o:
+            writer = csv.writer(file_o)
+            if not IOController.is_coulumn_inserted:
+                df_column: List[str] = IOController.input_file_columns
+                df_column.append("emails"), df_column.append("social_handle")
+                writer.writerow(df_column)
+                IOController.is_coulumn_inserted = True
+
+            writer.writerow(output_content)    
 
 
     @staticmethod
-    def update_stat_for_thread(
+    def update_live_stat_for_thread(
         thread_id: int, 
-        timestamp: datetime,
+        last_updated: datetime,
         total_url_passed: int,
         email_count: int, 
-        social_link_count: int
+        social_link_count: int,
+        completed_urls: int, 
+        total_requests: int,
     )-> None:
-        if IOController.__file_already_exist(IOController.stat_file_name):
+        stat_data: List[List[Any]] = []
+        stat_df_column: List[str] = [
+            "thread_id", 
+            "last_updated",
+            "total_url_passed", 
+            "email_found", 
+            "social_link_found", 
+            "completed_urls", 
+            "total_requests",
+        ]
+        found = False
+        if IOController.__file_already_exist(IOController.stat_file_path):
             IOController.is_coulumn_inserted_in_stat = True
-        with open(IOController.stat_file_name, mode="a", newline="") as stat_o:
+            with open(IOController.stat_file_path, mode="r") as stat_o:
+                reader = csv.reader(stat_o)
+                stat_data = [row for row in reader] 
+            
+            for row in stat_data:
+                if row and row[0].isdigit() and int(row[0]) == thread_id:
+                    # Update statistics for existing thread
+                    row[1] = last_updated
+                    row[2] = total_url_passed
+                    row[3] = email_count
+                    row[4] = social_link_count
+                    row[5] = completed_urls
+                    row[6] = total_requests
+                    found = True
+                    break
+        
+        if not found:
+            # Add a new entry if the thread doesn't exist in stats
+            stat_data.append([
+                thread_id, 
+                last_updated, 
+                total_url_passed, 
+                email_count, 
+                social_link_count,
+                completed_urls,
+                total_requests,
+            ])
+        
+        with open(IOController.stat_file_path, mode="w", newline="") as stat_o:
             writer = csv.writer(stat_o)
             if not IOController.is_coulumn_inserted_in_stat:
-                stat_df_column: List[str] = ["thread_id", "timestamp","total_url_passed", "email_found", "social_link_found"]
                 writer.writerow(stat_df_column)
                 IOController.is_coulumn_inserted_in_stat = True
             
-            writer.writerow([thread_id, timestamp,total_url_passed, email_count, social_link_count])
+            # live update
+            writer.writerows(stat_data)
+    
+
+    @staticmethod
+    def store_stat_history()->None:
+        data: List[List[Any]] = []
+        if IOController.__file_already_exist(IOController.stat_file_path):
+            with open(IOController.stat_file_path, "r") as stat_o:
+                reader = csv.reader(stat_o)
+                data = [row for row in reader]
+                if len(data) > 0 and data[0][0] == "thread_id":
+                    # truncating the column
+                    data = data[1:]
+                        
+        if IOController.__file_already_exist(IOController.stat_history_file_path):
+            IOController.is_coulumn_inserted_in_stat_history = True
+        
+        with open(IOController.stat_history_file_path, "a", newline="") as stat_history:
+            writer = csv.writer(stat_history)
+            if not IOController.is_coulumn_inserted_in_stat_history:
+                stat_df_column: List[str] = [
+                    "thread_id", "last_updated","total_url_passed", "email_found", "social_link_found", "completed_urls"
+                ]
+                writer.writerow(stat_df_column)
+                IOController.is_coulumn_inserted_in_stat_history = True
+            
+            writer.writerows(data)
 
 
     @staticmethod
@@ -76,23 +174,25 @@ class IOController:
             domain += parsed_url.path.split('/')[0]        
         if not truncate_scheme: 
             domain = parsed_url.scheme + "://" + domain
-        return domain 
+        return domain         
 
 
     @staticmethod
-    def console_log(args: List)-> None:
+    def console_log(args: List)-> None: 
         domain = IOController.extract_domain(args[0])
         timestamp = datetime.now()
-        print(f"[thread_id: {args[1]}] [timestamp: {timestamp}]: url:{domain}, {str(args[2]).upper()} found: {args[3]}")
+        print(f"[thread_{args[1]}] [timestamp: {timestamp}]: url:{domain}, {args[2]} found: {args[3]}")
 
 
     @staticmethod
-    def read_input()-> DataFrame:
-        try:
-            input_df: DataFrame = pd.read_csv(
-                filepath_or_buffer=IOController.input_file_name
-            )
-            return input_df
-        except FileNotFoundError:
-            print("Input file not found or path is incorrect.\n") 
-            return
+    def read_input(file_path: str)-> DataFrame:
+        with open(file_path, 'rb') as f:
+            result = chardet.detect(f.read())
+        
+        input_df: DataFrame = pd.read_csv(file_path, encoding=result['encoding'])
+        if file_path == IOController.input_file_name:
+            IOController.input_file_columns = input_df.columns.tolist()
+        return input_df
+    
+
+
